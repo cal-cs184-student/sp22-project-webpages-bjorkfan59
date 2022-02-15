@@ -1,7 +1,331 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 1 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Rasterizer</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2018</h1>
+<h1 align="middle">Project 1: Rasterizer</h1>
+<h2 align="middle">Gavin Fure, CS184-bjorkfan59</h2>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>Give a high-level overview of what you implemented in this project. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the project.</p>
+
+<h2 align="middle">Section I: Rasterization</h2>
+
+<h3 align="middle">Part 1: Rasterizing single-color triangles</h3>
+
+<p>
+	My approach to rasterizing triangles was pretty simple. First, I consturcted a rectangular bounding box around the triangle using the min and max x and y coordinates of all of the triangle's corners. I then sampled every pixel in this area, using the "inside" function described in the lecture slides. I used two for loops to traverse the bounding box, and calculated the L values for each line with each pixel. If every L value is less than or equal to 0, then the pixel is inside the triangle and we can call rasterize_point on it with the given color. Rasterize_point is useful because it performs boundary checks and then calls fill_pixel.
+</p>
+
+<p>
+	This strategy works great when the corners are presented in the clockwise order, but fails when they are presented in the counterclockwise order. See the following example of test 6, which fails to render some of the polygons.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/test6_failed.png" align="middle" width="400px"/>
+        <figcaption align="middle">Failed Render</figcaption>
+      </td>
+      <td>
+        <img src="images/test_6_ref.png" align="middle" width="300px"/>
+        <figcaption align="middle">Expected Image</figcaption>
+      </td>
+  </table>
+</div>
+
+<p>
+	The solution I came up with is pretty simple. Instead of trying to swap around the order of the corners, we can just also check whether every L value is >= 0 on top of checking whether they are all <= 0. The three L equations will only agree when a point is inside the triangle.No matter where a point outside of the triangle is, two of the L functions will always agree and one will always disagree. Consider a visual example, using this lecture slide:
+</p>
+
+<p align="middle">
+ <img src="images/intersection_dots.png" width="400px"/>
+</p>
+
+<p>
+	If a point is ever considered to be "outside" the triangle by all three L equations, then it must be inside the triangle. Each line separates space into two halves. They can be thought of to "color-in" only one side of that space. In this diagram, they color space yellow. Notice that the entire diagram is yellow. No matter where a point is located, it will always be in a region that is colored-in by one of the three lines. The important thing is not whether a point is in a "colored-in" location or an "uncolored" location, it's whether it is in the intersection of three common colorings. Right now, the center of the diagram is colored-in by all three lines, and so it appears dark yellow. If we flip the winding order of the points in the diagram, then the area inside the triangle will appear white, because it is uncolored by all of the lines. This will be true for all combinations of three points that form a valid triangle. This is not a rigorous proof, but I have outlined my general reasoning, and it seems to work in practice. Using this agreement method, we can determine whether a point is inside or outside of a triangle without worrying about winding order.
+</p>
+<p>
+	Since my algorithm checks every sample within the bounding box of the triangle, it satisfies the efficiency requirement in the spec. I could probably make this faster by vectorizing and/or parallelizing it, but I am happy with its performance for now.
+</p>
+<p>
+	Below are tests 3 through 6 using my rasterization algorithm.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/test3.png" align="middle" width="400px"/>
+        <figcaption align="middle">Test 3</figcaption>
+      </td>
+      <td>
+        <img src="images/test4.png" align="middle" width="400px"/>
+        <figcaption align="middle">Test 4</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/test5.png" align="middle" width="400px"/>
+        <figcaption align="middle">Test 5</figcaption>
+      </td>
+      <td>
+        <img src="images/test6.png" align="middle" width="400px"/>
+        <figcaption align="middle">Test 6</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+
+<h3 align="middle">Part 2: Antialiasing triangles</h3>
+<p>Supersampling allows us to smooth out harsh "jaggies" and other visual artifacts. Instead of just looking at the center of the pixel, we can more accurately represent the actual image by sampling at multiple points within each pixel and averaging over those samples. In order to implement supersampling, I modified sample_buffer to be sized based on sample_rate. Previously, sample_buffer contained just sample for each pixel. Now, we store sample_buffer samples per pixel. This means that we have increased the size of sample_buffer by sample_rate times. 
+</p>
+<p> Now I will go into a bit more detail about how I implemented the function. For every pixel, the number of supersamples we look at in one row is sqrt(sample_rate). We can iterate over i from 0 to sample_rate, and calculate row/column values by using modulo and floor division, then transform those values into percentages to represent how far across the pixel our sampling value is. To calculate the column number we are sampling, I used i % sample_rate. Then, to convert this to a percentage representing the amount of horizontal distance we will traverse before sampling, I calculated (1 + column_number) / (1 + sqrt(sampling_rate)). I added 1 to the column number because we don't want to begin sampling at the leftmost edge of a pixel, we want to start somewhere in the middle. Similarly, we don't want our final sample to be on the rightmost edge of a pixel. To acheive even spacing, I add 1 to the total number of columns we are looking at (sqrt(sampling_rate)). For example, with a sampling rate of 1, we want our 0th sample to be 50% across the pixel. For a sampling rate of 4 (2 columns and 2 rows), we want our 0th column sample to be 1/3 of the way across the pixel and our 1st column sample to be 2/3rds of the way across the pixel. Once we have determined the percentage distance across the pixel, we add this to the x value of the pixel to find the true horizontal location of our sample. We perform a similar calculation to find the true vertical location of each sample. Then, we plug this location into the inside() function we defined in the previous section. If the sample is inside the triangle, we place the corresponding color in the correct location in the sample buffer, accounting for the sampling_rate.
+</p>
+<p>
+	Now that we have all of our samples, we need to combine them in a way that performs antialiasing. We can just average together all of the supersampled values for each pixel to get a new antialised pixel value. The higher our supersample rate, the more accurate our antialised image will be. To illustrate this, we will look at examples of triangles being displayed with different supersampling rates, from 1 to 16.
+</p> 
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/super1.png" align="middle" width="400px"/>
+        <figcaption align="middle">Supersampling rate: 1</figcaption>
+      </td>
+      <td>
+        <img src="images/super4.png" align="middle" width="400px"/>
+        <figcaption align="middle">Supersampling rate: 4</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/super9.png" align="middle" width="400px"/>
+        <figcaption align="middle">Supersampling rate: 9</figcaption>
+      </td>
+      <td>
+        <img src="images/super16.png" align="middle" width="400px"/>
+        <figcaption align="middle">Supersampling rate: 16</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>
+	The images with lower supersampling rates have much more pronounced jaggies than those taken with higher rates. Even just a rate of 4 is enough to smooth our the most noticeable artifacts. Notice how the supersampled images have 'in-between' pixels that aren't just either red or white. This shows the averaging (or blurring) effect of supersampling. It's very striking in comparison with the image that has no supersampling. In that image, every pixel is either colored-in completely or not at all, and that is where those jagged edges and harsh artifacts come from.
+</p>
+
+
+
+<h3 align="middle">Part 3: Transforms</h3>
+
+<p>
+	In this section, we had to implement three basic transforms: translation, scaling, and rotation. This part was pretty simple, we just had to return 3x3 matrices that perform the corresponding transformations. We were given these matrices in Lecture 4, so I just had to implement them. The only tricky thing was that I needed to convert from degrees to radians for rotation.
+</p>
+
+<p>
+	Below is my rendition of cubeman mid-jumping jack! Or he could be making snow angels in a big white snowy field :)
+</p>
+
+<p align="middle">
+ <img src="images/my_robot.png" width="400px"/>
+</p>
+
+
+
+<h2 align="middle">Section II: Sampling</h2>
+
+<h3 align="middle">Part 4: Barycentric coordinates</h3>
+<p>
+	Barycentric coordinates are super useful for interpolating values between points of a triangle. Barycentric coordinates measure how close a certain point is to each corner, proportionally. If alpha is large, then the point is close to point A. At the same time, since alpha is large, then beta and gamma must be small, indicating that the point is far away from points B and C. This proportionality property is guaranteed because alpha + beta + gamma = 1. If any value is negative, then the point is outside the triangle.
+</p>
+
+<p>
+	I will demonstrate with the following example, constructed from an svg file. The top vertex is set to be red, the bottom left is blue, and the bottom right is green. If we move down from the red vertex towards the blue vertex along the leftmost edge, color transitions gradually from red to purple to blue. We will say that alpha corresponds to to red vertex, beta corresponds to the blue one, and gamma corresponds to the green one. Along this leftmost edge, the gamma value is 0, so there is no green in these colors. At the red vertex, our color is r:1, g:0, b:0, corresponding to alpha=1, gamma=0, beta=0. Halfway between the two, the value is r:.5, g:0, b:.5, corresponding to alpha=.5, gamma=0, beta=.5. Since red and blue are equal, the resulting color is purple! We end up with a smooth interpolation between colors in all directions.
+	</p>
+
+<p align="middle">
+ <img src="images/bary_test.png" width="400px"/>
+</p>
+
+<p>
+	Finally, here is Test 7:
+</p>
+
+<p align="middle">
+ <img src="images/test7.png" width="400px"/>
+</p>
+
+<p>
+	I had a problem at first where my image came out upside down:
+</p>
+
+<p align="middle">
+ <img src="images/test_7.png" width="400px"/>
+</p>
+
+<p>
+	It took me a long time to figure out the solution, but when I started inspecting my custom svg file, I realized that I had swapped the blue and green channels at one point in my code! I wouldn't have been able to figure this out without help from TAs and from closely analyzing the svg files.
+</p>
+
+
+<h3 align="middle">Part 5: "Pixel sampling" for texture mapping</h3>
+
+<p>
+	When we do texture mapping, we have to map coordinates from a triangle on the screen to a triangle in a texture map. To do this conversion, we can use barycentric coordinates. This ensures that the area of the texture triangle we look at is the same spot in the screen triangle that we are trying to fill, just in a different basis. Barycentric coordinates are very useful for this conversion because they are kind of like a very constrained, consistent basis.
+</p>
+<p>
+	I used the same basic supersampling framework as part 2. Instead of just inputting a single static color for the whole triangle, I converted from screen coordinates to barycentric coordinates to texture coordinates. Then I add this corresponding color to the correct spot on the sample buffer.
+</p>
+<p>
+	During our conversion into texture coordinates, we will often end up with coordinates that are not perfect integers. However, we only store data for the texture map on integer coordinates. We saw two ways to resolve this: nearest neighbor and bilinear interpolation. Nearest neighbor is the simplest: we just round our float coordinates to the closest integer values, then sample from that. Bilinear is a bit more nuanced: we want to interpolate together the four values closest to our point, based on how close our float coordinates are to each. We can perform this bilinear interpolation with three linear interpolation operations. First, we calculate a linear interpolation (lerp) of color between the topmost two values, based on the horizontal distance between our point and the leftmost point. We calculate the same for the bottom two points. Then, we can perform a third lerp on these two values, based on the vertical position of our point.
+</p>
+<p>
+	Next, we will compare the results of nearest neighbor sampling to those of bilinear interpolation at two different supersampling rates.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/parrot_n1.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest sampling, Supersampling rate: 1</figcaption>
+      </td>
+      <td>
+        <img src="images/parrot_n16.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest sampling, Supersampling rate: 16</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/parrot_b1.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear sampling, Supersampling rate: 1</figcaption>
+      </td>
+      <td>
+        <img src="images/parrot_b16.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear sampling, Supersampling rate: 16</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>
+	The differences are pretty subtle at first. They are much easier to see on the GUI, when you can flip between them. The basic principle is that supersampling averages together neighboring values, mitigating aliasing by smoothing out the shape. Bilinear sampling does something very similar, producing a smoother representation of the texture map than nearest neighbor sampling. The close-up of Bilinear sampling with a supersampling rate of 1 looks strikingly similar to the nearest sampling example with supersampling rate 16. It's that good! A huge improvement over nearest sampling. The difference between the two methods diminishes as the supersampling rate increases, but the bilinear example at 16 supersampling rate is definitely a bit smoother than the nearest neighbor sampling example, if you look close enough and overlay the two on top of each other.
+</p>
+
+
+<h3 align="middle">Part 6: "Level sampling" with mipmaps for texture mapping</h3>
+
+<p>
+	For level sampling, we store a mipmap that contains several versions of the image at different resolutions. When we apply a texture to a the screen, sometimes we are displaying it at reduced or increased size. Mipmaps help solve the minification problem by making low-res versions of the texture easily accessible. To decide which level of the mipmap to sample, we determine a measure of 'depth' by looking at the texture-space locations of two extra points per pixel: a point one step to the right, and another one step up from the current pixel. After converting those to texture space via barycentric coordinates, we can determine the distance in texture space that a single pixel step traverses. If this value is large, then we will display only a very small portion of the texture, so we use the low-res copies of the image (which at stored at higher levels in the mipmap). If it's small though, then we will be displaying most of the texture, so we want to use the highest-res copy that we have available (stored at lower levels in the mipmap).
+</p>
+<p>	We now have three different sampling techniques available. Nearest-neighbor pixel sampling is most basic form of texture application. It is as efficient as pixel sampling can be, and involves very little additional computation. Linearly-interpolated pixel sampling, on the other hand, produces much smoother results at the cost of a small amount of extra computation. It requires no extra memory usage, and its runtime efficiency stays on the same big-O level as nearest-neighbor sampling: O(n), where n is the number of pixels displayed. It does access 4 times as many texels from the texture, but this is a very fast operation, so it doesn't add too much overhead. Similarly, the three lerp operations are only simple arithmetic. 
+</p>
+<p>
+	Level sampling requires a slight bit more memory usage, but it tends to result in less runtime computation and smoother images (as long as the lower-res versions are properly computed with supersampling or pre-downsize gaussian blurring). Linearly-interpolating across levels offers a slight improvement on image quality for doubling the amount of pixel samples computer. The impact of this depends on the pixel sampling technique being used, but it can be nice to do if it doesn't impact performance too much.
+</p>
+<p>
+	Supersampling has a huge amount of antialiasing power, but it can be very costly to perform, depending on how many pixels you are sampling and how big the image is. It also requires a great deal more memory usage, on the order of O(n*s), where n represents the pixels used by the display and s represents the number of supersamples per pixel. This is by far the best antialising method, but it's also the most expensive.
+</p>
+
+<p>
+	Next, I will display a warped version of this great album cover by Magdalena Bay using different sampling techniques. The differences are best seen in the close-up, which focuses on a flower in the top right of the cover. All are taken without any supersampling.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/L_zero_P_near.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Zero, P_Near</figcaption>
+      </td>
+      <td>
+        <img src="images/L_zero_P_Lin.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Zero, P_Linear</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/L_near_P_near.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Near, P_Near</figcaption>
+      </td>
+      <td>
+        <img src="images/L_near_P_lin.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Near, P_Lin</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p align="middle">
+	<img src="images/trilinear.png" align="middle" width="400px"/>
+        <figcaption align="middle">Trilinear</figcaption>
+	</p>
+
+<p>
+	The difference is more clear when you can flip between them in the GUI, but I think the effect of the settings is pretty clear on that close-up. It's also more noticeable for images that are more zoomed out, because of how level sampling stores downsampled versions of images. Below I will display a more zoomed-out image without a pixel close-up to focus more on how the whole image changes. All were taken with no supersampling and bilinear texture mapping.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/L_zero.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Zero</figcaption>
+      </td>
+      <td>
+        <img src="images/L_near.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Near</figcaption>
+      </td>
+      <td>
+        <img src="images/L_linear.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_Linear</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>
+	The L_Near and L_Linear images are slightly blurrier (smoother) than the L_Zero version.
+</p>
+
+
+
+<h2 align="middle">Section III: Art Competition</h2>
+<p>If you are not participating in the optional art competition, don't worry about this section!</p>
+
+<h3 align="middle">Part 7: Draw something interesting!</h3>
+
+</body>
 </html>

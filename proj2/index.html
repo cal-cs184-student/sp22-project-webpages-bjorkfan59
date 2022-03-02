@@ -37,18 +37,18 @@
   <div>
 
     <h2 align="middle">Overview</h2>
-    <p>We implemented both 1D Bezier curves and 2D Bezier surfaces. We also worked fairly extensively with the HalfedgeMesh class, implementing edge flips, edge splits, and loop subdivision (for mesh updampling). This project was very interesting and offered a glimpse at a lot of the operations underlying 3D rendering.</p>
+    <p>We implemented both 1D Bezier curves and 2D Bezier surfaces. We also worked fairly extensively with the HalfedgeMesh class, implementing edge flips, edge splits, and loop subdivision (for mesh updampling). This project was very interesting and offered a glimpse at a lot of the operations underlying 3D rendering. After completing this project, I am amazed that any 3D video game can run at all. It seemed that I would run into efficiency issues really quickly, especially when upsampling a model. This gave me a huge amount of appreciation for the amount of work that goes into optimizing graphics engines, as well as the insane amount of craft and skill required to make something that looks good. I love the cow model!!!!!</p>
 
     <h2 align="middle">Section I: Bezier Curves and Surfaces</h2>
 
     <h3 align="middle">Part 1: Bezier curves with 1D de Casteljau subdivision</h3>
 
     <p>
-    	de Casteljau's algorithm recursively computes Bezier curves by performing linear interpolations between Bezier points. If we are given n points, each step of the algorithm computes n - 1 points, each an interpolation between two points in the original set (based on some value 0<=t<=1). We can continue computing this until we are left with only 1 point, which lies along the bezier curve. We can use this to compute the entire bezier curve by evaluating at different values of t.
+    	De Casteljau's algorithm recursively computes Bezier curves by performing linear interpolations between Bezier points. If we are given n points, each step of the algorithm computes n - 1 points, each an interpolation between two points in the original set (based on some value 0<=t<=1). We can continue computing this until we are left with only 1 point, which lies along the bezier curve. We can use this to compute the entire bezier curve by evaluating at different values of t.
     </p>
 
     <p>
-    	I wanted to implement this in a vectorized way, but this proved not quite possible with the setup we have. We are given a vector that contains a series of Vector2D objects, which is the equivalent of a 2xN matrix. Unfortunately, we only have access to Matrix3x3 and Matrix4x4. There aren't any dynamically-sized vectorized matrices available here. There probably are some C++ libraries that have this, but I didn't think it was worth it to look for them for this tiny optimization. Since we can't perform vectorized operations on std::vector objects, I just used a for loop to iterate through the list, computing lerps of the current item and the next item. I then stored these in a new std::vector<Vector2D> object. I wasn't sure if we were allowed to modify the original list, so I stayed on the safe side. 
+    	I wanted to implement this in a vectorized way, but this proved not quite possible with the setup we have. We are given a vector that contains a series of Vector2D objects, which is the equivalent of a 2xN matrix. Unfortunately, we only have access to Matrix3x3 and Matrix4x4. There aren't any dynamically-sized vectorized matrices available here. There probably are some C++ libraries that have this, but I didn't think it was worth it to look for them for this tiny optimization. Since we can't perform vectorized operations on std::vector objects, I just used a for loop to iterate through the list, computing lerps of the current item and the next item. I then stored these in a new std::vector<Vector2D> object. I wasn't sure if we were allowed to modify the original list, so I stayed on the safe side and just created a new object to return. 
     </p>
 
     <p>
@@ -387,11 +387,16 @@
   	Now our subdivisions are nice and symmetrical! Loop subdivision tends to amplify the effects of irregular edge patterning. The asymmetry of the single diagonal is emphasized by the subdivision process, leading to that weird lopsided shape. Since we began with a more symmetrical starting state this time, the result remained symmetrical throughout the process.
   </p>
 
+  <p>
+  	And that's it for the project!!! I'll try to be more concise with my explanations next time. This is a really cool project, and I love how clear and helpful the spec is!
+  </p>
 
-    <h2 align="middle">Section III: Optional Extra Credit</h2>
-    <p>If you are not participating in the optional mesh competition, don't worry about this section!</p>
 
-    <h3 align="middle">Part 7: Design your own mesh!</h3>
+<br>
+   <p align="middle">
+   	<img src="images/cow.png" align="middle" width="400px" />
+            <figcaption align="middle">cow gang!!!!!</figcaption>
+   </p>
 
 </body>
 

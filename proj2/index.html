@@ -1,7 +1,398 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 2 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+  <style>
+    body {
+      padding: 100px;
+      width: 1000px;
+      margin: auto;
+      text-align: left;
+      font-weight: 300;
+      font-family: 'Open Sans', sans-serif;
+      color: #121212;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      font-family: 'Source Sans Pro', sans-serif;
+    }
+  </style>
+  <title>CS 184 Mesh Editor</title>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+  <h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2020</h1>
+  <h1 align="middle">Project 2: Mesh Editor</h1>
+  <h2 align="middle">Gavin Fure, CS184-bjorkfan59</h2>
+
+  <br><br>
+
+  <div>
+
+    <h2 align="middle">Overview</h2>
+    <p>We implemented both 1D Bezier curves and 2D Bezier surfaces. We also worked fairly extensively with the HalfedgeMesh class, implementing edge flips, edge splits, and loop subdivision (for mesh updampling). This project was very interesting and offered a glimpse at a lot of the operations underlying 3D rendering.</p>
+
+    <h2 align="middle">Section I: Bezier Curves and Surfaces</h2>
+
+    <h3 align="middle">Part 1: Bezier curves with 1D de Casteljau subdivision</h3>
+
+    <p>
+    	de Casteljau's algorithm recursively computes Bezier curves by performing linear interpolations between Bezier points. If we are given n points, each step of the algorithm computes n - 1 points, each an interpolation between two points in the original set (based on some value 0<=t<=1). We can continue computing this until we are left with only 1 point, which lies along the bezier curve. We can use this to compute the entire bezier curve by evaluating at different values of t.
+    </p>
+
+    <p>
+    	I wanted to implement this in a vectorized way, but this proved not quite possible with the setup we have. We are given a vector that contains a series of Vector2D objects, which is the equivalent of a 2xN matrix. Unfortunately, we only have access to Matrix3x3 and Matrix4x4. There aren't any dynamically-sized vectorized matrices available here. There probably are some C++ libraries that have this, but I didn't think it was worth it to look for them for this tiny optimization. Since we can't perform vectorized operations on std::vector objects, I just used a for loop to iterate through the list, computing lerps of the current item and the next item. I then stored these in a new std::vector<Vector2D> object. I wasn't sure if we were allowed to modify the original list, so I stayed on the safe side. 
+    </p>
+
+    <p>
+    	Here are some examples of my results:
+    </p>
+
+    <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/bez_0.png" align="middle" width="400px" />
+            <figcaption align="middle">No iterations.</figcaption>
+          </td>
+          <td>
+            <img src="images/bez_1.png" align="middle" width="400px" />
+            <figcaption align="middle">One iteration.</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/bez_2.png" align="middle" width="400px" />
+            <figcaption align="middle">Two iterations.</figcaption>
+          </td>
+          <td>
+            <img src="images/bez_3.png" align="middle" width="400px" />
+            <figcaption align="middle">Three iterations.</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/bez_4.png" align="middle" width="400px" />
+            <figcaption align="middle">Four iterations.</figcaption>
+          </td>
+          <td>
+            <img src="images/bez_5.png" align="middle" width="400px" />
+            <figcaption align="middle">Five iterations. Complete!</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/bez_curve.png" align="middle" width="400px" />
+            <figcaption align="middle">Complete curve.</figcaption>
+          </td>
+          <td>
+            <img src="images/reshape_bez.png" align="middle" width="400px" />
+            <figcaption align="middle">New shape.</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/reshape_scroll_1.png" align="middle" width="400px" />
+            <figcaption align="middle">New shape after scrolling (changing t).</figcaption>
+          </td>
+          <td>
+            <img src="images/reshape_scroll_2.png" align="middle" width="400px" />
+            <figcaption align="middle">New shape after scrolling in the opposite direction.</figcaption>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+
+    <h3 align="middle">Part 2: Bezier surfaces with separable 1D de Casteljau subdivision</h3>
+
+	<p>
+		The extension from Bezier curves to Bezier surfaces is actually pretty simple. Before, we had a list of points which described a curve. Now, we basically have a list of curves which describe a space. We're given a list of lists where each row describes a Bezier curve. Our first step is to solve all of those curves (with the given value v as the interpolation value). That leaves us with a new list of points, which we can use to describe a new curve with the same process as before! This curve is kind of perpindicular to the first: it's constructed along the column of solved rows.
+	</p>
+	<p>
+		Here's the teapot, constructed by my algorithm.
+	</p>
+	<p align="middle">
+		<img src="images/teapot.png" align="middle" width="600px" />
+	</p>
+
+
+    <h2 align="middle">Section II: Sampling</h2>
+
+    <h3 align="middle">Part 3: Average normals for half-edge meshes</h3>
+
+    <p>
+    	Implementing this was much more straightforward than I thought it might be! From lecture slides, I gathered that the normal vector of a vertex can be computed by summing together the normal vectors of all the faces adjaces to the vertex, then normalizing that vector. Since faces have a built-in normal() function in our halfEdgeMesh implementation, all I had to do was iterate over the faces! To do this, I started with the first halfedge on the vertex. After adding the normal vector of this edge's corresponding face to a running total, I iterate the next edge by calling h = h->twin()->next(). This edge will always correspond to the next face. We continue to do this until we reach the original halfedge, and then we're pretty much done! We just normalize the total by calling vec.unit(), and we've computed the vertex's normal vector!
+    </p>
+    <p>
+    	Here's an example of the output my implementation produces. We will compare teapot.dae using flat shading and smooth Phong shading (which requires the vertex normal vector).
+    </p>
+
+    <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/teapot_flat_shading.png" align="middle" width="400px" />
+            <figcaption align="middle">Flat shading</figcaption>
+          </td>
+          <td>
+            <img src="images/teapot_smooth_shading.png" align="middle" width="400px" />
+            <figcaption align="middle">Smooth Phong shading</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p>
+  	As you can see, the Phong-shaded teapot is much smoother than the one constructed with the default shading method. Also notice that there aren't any artifacts or blurring near the edges of the teapot.
+  </p>
+
+
+    <h3 align="middle">Part 4: Half-edge flip</h3>
+
+    <p>
+    	This section was much more difficult than I expected it to be. I started out by drawing a diagram and labelling all the halfedges by the vertices they were connected to (i.e. a halfedge that points from point a to b would be called halfedge ab.) Then, I named every halfedge, edge, face, and vertex in code, then performed swaps using setNeighbor(). This version did not work. It always resulted in infinite computation after my code finished executing, which means there was some problem with what I was doing. I double and triple checked everything, writing everything over from scratch a couple times, but nothing worked. The outcome was the same. One implementation did not cause an infinite loop, but instead seemed to delete the edge, place the halfedges in random places inside the triangle, and somehow added a new vertex in there too (even though I never added a new vertex). Needless to say, I had no clue what was going on. My salvation was the "Guide to Implementing Edge Operations on a Halfedge Data Structure", the handout by CMU CS15-462 that was linked in the resources section of the Primer on the HalfEdgeMesh class on the website. I followed their directions to the letter, even redrawing out their diagrams, and suddenly everything worked perfectly. I'm still not sure what the bug was in my original implementation. I had a pretty systematic way of approaching this, but the handout was even more clearly organized. I think the extremely exact explicitness was what saved my implementation!
+    </p>
+    <p>
+    	Here are some edge flips:
+    </p>
+
+    <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/pre-flip-teapot.png" align="middle" width="400px" />
+            <figcaption align="middle">No flips</figcaption>
+          </td>
+          <td>
+            <img src="images/post-flip-teapot.png" align="middle" width="400px" />
+            <figcaption align="middle">A bunch of flips!</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p>
+  	We added enough flips to make a whole new pattern!
+  </p>
+
+
+    <h3 align="middle">Part 5: Half-edge split</h3>
+
+    <p>
+    	I followed a structured procedure to implement half-edge split. It's very similar to the previous part! The biggest difference is that this time we are adding a few new elements: one new vertex, three new edges, two new faces, and 6 new halfedges. After defining all of the existing elements the same was as in part 4, I created these new elements. For the new vertex v4, I calculated its position by averaging together the positions of v0 and v1 (the two vertices connected by e0, the input edge). Next, I set all of the neighbors of all of the halfedges, according to a diagram I drew. I made sure to minimize the changes in halfedge, edge, and vertex location between the original state and the final state. After assigning all the neighbors of all the halfedges, I set the halfedges of all vertices, edges, and faces to be valid halfedges. After that, it was finished! I mostly used visual debugging, but I also used the provided check_for functions to make sure that my halfedges were all pointing to the correct locations. Here are some examples of the edge slit function being used:
+    </p>
+
+    <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/pre-split.png" align="middle" width="400px" />
+            <figcaption align="middle">No splits</figcaption>
+          </td>
+          <td>
+            <img src="images/post-split.png" align="middle" width="400px" />
+            <figcaption align="middle">A bunch of splits!</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/before.png" align="middle" width="400px" />
+            <figcaption align="middle">No splits or flips</figcaption>
+          </td>
+          <td>
+            <img src="images/after_splits_and_flips.png" align="middle" width="400px" />
+            <figcaption align="middle">A combination of splits and flips</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/post-many-splits.png" align="middle" width="400px" />
+            <figcaption align="middle">Many splits in one area</figcaption>
+          </td>
+          <td>
+            <img src="images/post-splits-and-flips.png" align="middle" width="400px" />
+            <figcaption align="middle">A combination of splits and flips (creates a non-manifold result)</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p>
+  	At first, my implementation would sometimes delete adjacent faces in certain scenarios:
+  </p>
+
+  <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/mesh_hole_1.png" align="middle" width="400px" />
+            <figcaption align="middle"></figcaption>
+          </td>
+          <td>
+            <img src="images/mesh_hole_2.png" align="middle" width="400px" />
+            <figcaption align="middle"></figcaption>
+          </td>
+        </tr>
+    </table>
+</div>
+
+<p> 
+	Since the relevant halfedges were no longer shown in the image, it was very difficult to debug this issue. I ended up drawing an entirely new diagram (that had more minimal differenes between the orignal and final states) and recoding everything from scratch, using setNeighbor instead of manually assigning halfedge attributes this time. That ended up working perfectly!
+</p>
+
+
+    <h3 align="middle">Part 6: Loop subdivision for mesh upsampling</h3>
+
+<p>
+	To implement loop subdivision, I followed the structure outlined in the spec. First, I went back to my splitEdge function from the previous section to add some important changes: for the new edges that were added (not along the original edge), I set isNew to be true. I also set isNew to be true for the newly added vertex.
+</p>
+<p>
+	After that, I began setting up the logic of the subdivision. I iterated over every vertex, calculating the new position for that vertex based on the equation in the spec, basically doing a weighted average over the neighboring vertices. I set these new positions in the newPosition variable for each vertex. In this step, I also set every existing vertex's isNew to be false. Next, I iterated over every existing edge, setting isNew to be false and computing the newPosition for each edge which represents the smoothed new position of the vertex that would split that edge). After that loop completed, I looped over all of the edges again, this time splitting every edge that isn't new and updating the newPosition variable of the newly-created vertex with the newPosition of the edge that I computed in the last step. When I hit a a new edge, I just break out of the loop. Because of the way the newEdge() function is written, new edges are added only after all of the old edges, so this structure works great. 
+</p>
+<p>
+	Next, I iterate through every edge one final time, this time flipping any new edge that connects a new vertex to an old vertex. The first time I wrote this section, I accidentally included an erroneous '!' in my if statement that caused my program to only flip old edges instead of new ones. It caused a lot of problems, and took me about an hour and half to catch. It's always the tiny bugs that take the longest to find!!! To figure out that this was the problem, I commented out most of my implementation to look at what each individual loop actually did, then drew several diagrams to figure out what I wanted to happen. Eventually, I caught the bug!!! The final loop in this function copies all of the previously-computed smoothed new vertex positions (which are all stored in vertex->newPosition) into the actual position of each vertex.  After that, everything's done!
+	</p>
+
+	<p>
+		Sharp edges are smoothed out by loop subdivision, which could be a good thing or a bad thing depending on the context. For instance, take the following torus. The total volume it occupies decreased greatly with each subdivision, and it loses its sharp edges and flat faces. If those features were intended, then this could be considered a problem.
+	</p>
+
+	<div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/torus.png" align="middle" width="400px" />
+            <figcaption align="middle">Torus, no subdivisons</figcaption>
+          </td>
+          <td>
+            <img src="images/torus_1.png" align="middle" width="400px" />
+            <figcaption align="middle">One loop subdivision</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/torus_2.png" align="middle" width="400px" />
+            <figcaption align="middle">Two subdivisions</figcaption>
+          </td>
+          <td>
+            <img src="images/torus_3.png" align="middle" width="400px" />
+            <figcaption align="middle">Three</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p>
+  	If we make a bunch of splits along one of those big faces, we can kind of preserve the original shape a little bit, though we still lose a lot of the sharpness.
+  </p>
+
+  <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/split_torus.png" align="middle" width="400px" />
+            <figcaption align="middle">Lots of splits along a face</figcaption>
+          </td>
+          <td>
+            <img src="images/split_torus_angle.png" align="middle" width="400px" />
+            <figcaption align="middle">Another angle of the splits</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/split_torus_subdivided.png" align="middle" width="400px" />
+            <figcaption align="middle">After several subdivisions</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p>
+  	Next, we will look at the asymmetry of cube.dae's subdivisions. As we subdivide it, it converges towards a shape that isn't quite a sphere, but also isn't really a square. It gets kind of lopsided. 
+  </p>
+
+  <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/cube_as.png" align="middle" width="400px" />
+            <figcaption align="middle">Asymmetrical cube, no subdivisons</figcaption>
+          </td>
+          <td>
+            <img src="images/cube_as_2.png" align="middle" width="400px" />
+            <figcaption align="middle">One loop subdivision</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/cube_as_3.png" align="middle" width="400px" />
+            <figcaption align="middle">Two subdivisions</figcaption>
+          </td>
+          <td>
+            <img src="images/cube_as_4.png" align="middle" width="400px" />
+            <figcaption align="middle">Three</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p> 
+  	This is likely because we only start with one diagonal edge split along each face. If we split this diagonal into a more symmetric pattern on each face, then the cube subdivides more evenly.
+  </p>
+
+   <div align="middle">
+      <table style="width=100%">
+        <tr>
+          <td>
+            <img src="images/cube_sym.png" align="middle" width="400px" />
+            <figcaption align="middle">Symmetrical cube, no subdivisons</figcaption>
+          </td>
+          <td>
+            <img src="images/cube_sym_2.png" align="middle" width="400px" />
+            <figcaption align="middle">One loop subdivision</figcaption>
+          </td>
+        </tr>
+        <br>
+        <tr>
+          <td>
+            <img src="images/cube_sym_3.png" align="middle" width="400px" />
+            <figcaption align="middle">Two subdivisions</figcaption>
+          </td>
+          <td>
+            <img src="images/cube_sym_4.png" align="middle" width="400px" />
+            <figcaption align="middle">Three</figcaption>
+          </td>
+        </tr>
+    </table>
+  </div>
+
+  <p>
+  	Now our subdivisions are nice and symmetrical! Loop subdivision tends to amplify the effects of irregular edge patterning. The asymmetry of the single diagonal is emphasized by the subdivision process, leading to that weird lopsided shape. Since we began with a more symmetrical starting state this time, the result remained symmetrical throughout the process.
+  </p>
+
+
+    <h2 align="middle">Section III: Optional Extra Credit</h2>
+    <p>If you are not participating in the optional mesh competition, don't worry about this section!</p>
+
+    <h3 align="middle">Part 7: Design your own mesh!</h3>
+
+</body>
+
 </html>

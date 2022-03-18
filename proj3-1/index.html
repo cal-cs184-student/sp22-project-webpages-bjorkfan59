@@ -1,7 +1,489 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 3-1 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>  
+    div.padded {  
+      padding-top: 0px;  
+      padding-right: 100px;  
+      padding-bottom: 0.25in;  
+      padding-left: 100px;  
+    }  
+  </style> 
+<title>Gavin Fure  |  CS 184</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="style.css" media="screen" />
+</head>
+<body>
+<br />
+<h1 align="middle">Assignment 3-1: PathTracer</h1>
+    <h2 align="middle">Gavin Fure</h2>
+
+    <div class="padded">
+        <p>
+            In this assignment, we'll be implementing raytracing! It's a topic that's pretty intuitive to understand in theory but difficult to implement in practice. We'll start by defining how we send out rays and figuring out how to compute intersections, then progress to speeding up and improving the quality of our renders by implementing bounding volume hierarchies, global illumination, and adaptive sampling. By the end, we will have a powerful rendering tool that is able to model real-world light physics to create natural-looking scenes.
+        </p>
+
+    <h2 align="middle">Part 1: Ray Generation and Intersection</h2>
+        <p>
+        To render an image, the image plane is first split up into a grid by <i>start_raytracing()</i> in pathtracer.cpp. <i>Raytrace_pixel()</i> is called on every pixel in every tile. This function performs several samples on random locations in the pixel, creating a ray with generate_ray and sending out that resulting ray with a call to <i>est_radiance_global_illumination() </i>. We average the results together like a simple Monte Carlo estimator, then set the resulting average color to the corresponding spot in the sample buffer. 
+    </p>
+        <p>
+        Generate_Ray() takes in an (x, y) coordinate in image space and transforms it into a ray in world-space. To do this, we first convert the (x, y) coordinate to a vector in camera space that points from the camera origin to the corresponding (x, y) location on the sensor plane. This transformation is a simple translation of x and y by -.5, a scaling of both x and y by 2, then scaling x by <i>tan(radians(hFov)/2)</i> and y by <i>tan(radians)vFov)/2)</i>. We also set the third dimension of this vector to be -1, because we define the sensor to be at this location. After we've transformed into camera space, we can easily transform into world space by multiplying our vector by the provided c2w matrix, which transforms from camera space to world space. Then we just have to set <b>min_t</b> to be <b>nClip</b> and <b>max_t</b> to be <b>fClip</b>, and we're done! We can return the ray to be used in other parts of the program.</p>
+        <p>
+            Next, the ray is sent out by <i>est_radiance_global_illumination()</i>, which at this point of the project just detects intersections and colors objects by the normal of the intersected plane. In this section of the project, we implemented both triangle and sphere intersection. For triangle intersection, I opted to use the Möller Tumbore algorithm, following the formula given in lecture slides. This is an optimized version of an intuitive process. We first need to calculate the amount of time it takes for the ray to intersect with the plane formed by the triangle's three vertices (if they intersect at all). If this ray is between <b>fmin</b> and <b>fmax</b>, we can continue on to calculate the intersection point as barycentric coordinates (using the results from the previous step). We then calculate the surface normal of the intersection point by interpolating the vertex normals of each vertex according to these barycentric coordinates. We also set the new <b>max_t</b> of this ray to be the amount of time it took to intersect with this plane. This keeps us from overwriting the value with one that would come from behind this object. If a ball in in front of a wall, the wall should block the wall. That's basically the intuition behind overwriting <b>max_t</b>. A couple of quick implementation details: because Möller Tumbore computes time to intersect and the barycentric coordinates all in one step, it's not really possible to implement early stopping with this configuration (unless we just checked the plane intersection before performing Möller Tumbore, but that kind of seems wasteful??). The barycentric coordinates output by the algorithm aren't normalized, so I had to divide them by their sum. This implementation also made checking triangle bounds very easy. We just had to make sure that all of the normalized barycentric coordinates were positive! 
+        </p>
+        <p>
+            Sphere intersection was pretty simple as well. We just had to calculate the two intersection points according to the equation presented in lecture, then take the closest valid intersection point. Once we have that point, we can compute the surface normal by subtracting the center of the sphere from the intersection point, then normalizing that difference vector.
+        </p>
+        <p> Here are some images I computed after completing part 1!<p>
+        <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                    <img src="images/banana_early.png" width="480px" />
+                    <figcaption align="middle">banana.dae</figcaption>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBspheres_pt_1.png" width="480px" />
+                    <figcaption align="middle">CBSpheres.dae</figcaption>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/cow.png" width="480px" />
+                    <figcaption align="middle">cow.dae</figcaption>
+                </tr>
+            </table>
+        </div>
+
+
+    <h2 align="middle">Part 2: Bounding Volume Hierarchy</h2>
+
+    <p>
+        In my BVH construction, I chose to split along the midpoint of the longest axis. First (for non-leaf nodes), I determine the max and min bounds of the vector of primitives I am given by defining a new BBox and expanding it by the bbox of every primitive. I use the extent attribute of the resulting bbox to choose the longest axis. I then sorted the vector of primitives based on this axis, then got the midpoint by calculating 
+    </p>
+    <p align="middle"><pre align="middle">start + ((end - start) / 2)</pre></p>
+    <p>
+
+        Finally, I recursively calculate the left and right branches of this node by calling <i>construct_bvh()</i> for each, with the appropriate start and endpoints. The left goes from start to the midpoint, and the right goes from the midpoint to the end. 
+    </p>
+    <p>
+        If in a particular iteration the number of primitives in the vector is less than or equal to <b>max_leaf_size</b>, that node is now a leaf node. Instead of finding the longest axis and splitting along the midpoint, I just add all of the primitives bboxes to the cumulative bbox and set the start and end of this node appropriately. 
+    </p>
+
+    <p>
+        The other tasks in this part were very difficult. They weren't too hard conceptually, but I ran into a huge amount of bugs relating to floating point precision and iterator mechanics. I spent a long time trying to find out how to properly get the midpoint of the primitive vector, but the solution ended up being just simple addition! I also had a terrifyingly complicated-looking bug where my scenes would render perfectly from certain angles, but would fail horrifically from other angles. This was very difficult to debug, and I re-wrote my functions several times before discovering that it was a floating-point error issue. After I computed max and min intersection times in <i>BBox::intersect()</i>, I would perform a series of <= and >= operations to determine whether those intersection points were inside the box or not. With certain viewing angles, the times I computed would be just on the wrong side of these boundaries, and the intersect function would erroneously report that no intersection occured. I solved this by writing a <i>close()</i> function, which returned true if two doubles were within a small distance (I chose 1e-4). I used this alongside all of my <= operations to solve this floating point precision issue. Here are some of the results of the broken algorithm, which look kind of cool, but mostly terrifying.
+    </p>
+
+    <div align="center">
+            <table style="width=100%">
+                <tr align="middle">
+                    <td>
+                        <img src="images/maxplanck_cool_fail.png" width="480px" />
+                    </td>
+                    <td>
+                        <img src="images/bunny_fail_3.png" width="480px" />
+                    </td>
+                </tr>
+                <tr align="middle">
+                    <td>
+                        <img src="images/bunny_fail_2.png" width="480px" />
+                        <figcaption align="middle">blob.dae</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/maxplanck_fail_1.png" width="480px" />
+                        <figcaption align="middle">wall-e.dae</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+    <p>
+        Looking back at this section after finishing the project, I could have used <b>EPS_F</b> for a slightly easier solution. Oh well! Despite all the bugs, I ended up figuring it out in the end! Here are some large scenes rendered (successfully) using BVH acceleration.
+    </p>
+
+    <div align="center">
+            <table style="width=100%">
+                <tr align="middle">
+                    <td>
+                        <img src="images/CBlucy.png" width="480px" />
+                        <figcaption align="middle">CBlucy.dae</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/maxplanck.png" width="480px" />
+                        <figcaption align="middle">maxplanck.dae</figcaption>
+                    </td>
+                </tr>
+                <tr align="middle">
+                    <td>
+                        <img src="images/blob.png" width="480px" />
+                        <figcaption align="middle">blob.dae</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/wall-e.png" width="480px" />
+                        <figcaption align="middle">wall-e.dae</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+    <p>
+        I will now analyze the speedup of the BVH method. With BVH, cow.dae took only .1356 seconds. Without BVH, it took 19.9010 seconds. This is a speedup of 14,676%! BVH is a completely different league than the naive method. Without BVH, banana.dae took 7.7832 seconds. With BVH, it took only .1306 seconds, a speedup of 5,959%. Again, absolutely insane difference. With BVH, BDgems.dae took .0589 seconds to render. Without, it took .8810 seconds. This one was pretty fast without (because it's such a simple scene), but it still had a significant speedup. Wall-e.dae only reached 2% completion after 40 seconds running without BVH. With BVH, it completed in .1585 seconds. This method makes it possible to quickly and painlessly render scenes that would previously take prohibitively large amounts of computation time. BVH only requires a small amount of pre-processing, but it drastically decreases the number of object intersection tests we need to perform. Instead of checking against all objects in a scene, we only want to know if our ray intersects the small subset of objects that are close together in the area that the ray is pointing.
+    </p>
+
+    <h2 align="middle">Part 3: Direct Illumination</h2>
+
+    <p>
+        In Uniform Hemisphere Sampling, I averaged the total reflected radiance of num_samples samples. For each sample, I took a random direction in a unit hemisphere (from <i>hemisphereSampler</i>) and converted it to the hemisphere of this plane by multiplying by <b>o2w</b>. Next, I constructed a ray using this vector as the direction and <b>hit_p</b> as the origin, then set the ray's <b>min_t</b> to be <b>EPS_D</b> to prevent accidental collision's with this intersection's plane. If there was an intersection between this ray and the scene, I found the light emitted from this second surface (from <i>get_emission()</i>). In this step, a surface only emits light if it's a light source (that's why importance sampling is so much better). Next, I calculate the reflectance of the surface of the original intersection by calling the f function in the intersection's bsdf. I use <b>w_out</b> for <b>wo</b>, and, for <b>wi</b>, convert the sampled vector of incoming light into object coordinates using <b>w2o</b>. I calculate the cosine of this angle and the normal of the surface by finding the dot product of the two vectors (as unit vectors). I also could have just converted to object coordinates and then used the z term, which is what the <i>cos_theta</i> function does. I then multiply together the incoming radiance, reflectance value, and cosine value, then divide by the (uniform) probability of selecting this particular ray, which in this case is just <i>1/(2*PI)</i>. We add up all of the reflectance samples, and then divide by the total number of samples.
+    </p>
+
+    <p>
+        In Importance Sampling, we realize that we only care about sampling directions that will actually hit a light. Instead of drawing random samples from an entire hemisphere (most of which will be useless), we instead iterate over a vector of lights in the scene. For each light, we will take samples of directions between our point and the light. If the light is a point light, then there is only one such direction, so we only have one sample. Otherwise, we draw randomly from the set of vectors that start at our point and end at the light source. I'll call this direction <b>wi</b>. Next, we want to check for shadows. Are there any objects between the light source and this intersection? If there are, they're blocking the light's path, so we can skip calculating the reflectance. To check, we create a ray from <b>wi</b> and <b>hit_p</b>, making sure to set the ray's <b>min_t</b> to be <b>EPS_F</b> and its <b>max_t</b> to be <b>distToLight - EPS_F</b>. This value of <b>min_t</b> stops us from intersecting our own plane (just like in Hemisphere sampling), and the value of <b>max_t</b> restricts the search space to exclude the actual light itself. We only want this intersection check to return true if there is an object blocking our view of the light source. If there's no object in the way, we can go ahead and calculate reflected light. We do that pretty much the same way we did in Hemisphere sampling, but instead of using <i>get_emission()</i> to get the amount of incoming light, we just use the radiance value that we calculated earlier when we drew our direction sample. The inside of the loop is complete! We just average together all of our samples, and we're done. Next, I'll show some images. All are calculated using 64 samples per pixel and 32 samples per light.
+    </p>
+
+    <div align="center">
+            <table style="width=100%">
+                <tr align="middle">
+                    <td>
+                        <img src="images/h_bunny_64_32.png" width="480px" />
+                        <figcaption align="middle">Hemisphere sampled bunny</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/i_bunny_64_32.png" width="480px" />
+                        <figcaption align="middle">Importance sampled bunny</figcaption>
+                    </td>
+                </tr>
+                <br>
+                <tr align="middle">
+                    <td>
+                        <img src="images/h_spheres_64_32.png" width="480px" />
+                        <figcaption align="middle">Hemisphere sampled spheres</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/i_spheres_64_32.png" width="480px" />
+                        <figcaption align="middle">Importance sampled spheres</figcaption>
+                    </td>
+                </tr>
+                <br>
+                <tr align="middle">
+                    <td>
+                        <img src="images/h_bench_64_32.png" width="480px" />
+                        <figcaption align="middle">Hemisphere sampled bench (probably only has point lights!)</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/i_bench_64_32.png" width="480px" />
+                        <figcaption align="middle">Importance sampled bench</figcaption>
+                    </td>
+                </tr>
+                <br>
+                <tr align="middle">
+                    <td>
+                        <img src="images/h_blob_64_32.png" width="480px" />
+                        <figcaption align="middle">Hemisphere sampled blob (again, most likely point lighting)</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/i_blob_64_32.png" width="480px" />
+                        <figcaption align="middle">Importance sampled blob</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <p>
+            The results of Uniform Hemisphere sampling are noisier and darker than those of Light Importance Sampling. Additionally, Uniform Hemisphere sampling is completely unable to render scenes that are lit with point lights, because the probability of a random direction in the hemisphere intersecting a point light is basically zero. Importance sampling of the scene lights, on the other hand, is easily able to render scenes lit by point lights. These are the main two differences between the methods. Importance sampling produces strictly better results than Uniform Hemisphere sampling, if the two take the same number of samples.
+        </p>
+
+        <p>
+            Next we will look at how the image changes depending on the number of light rays. The next four images are all computed with one sample per pixel, using importance sampling.
+        </p>
+
+         <div align="center">
+            <table style="width=100%">
+                <tr align="middle">
+                    <td>
+                        <img src="images/i_bunny_1_1.png" width="480px" />
+                        <figcaption align="middle">1 light ray</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/i_bunny_1_4.png" width="480px" />
+                        <figcaption align="middle">4 light rays</figcaption>
+                    </td>
+                </tr>
+                <br>
+                <tr align="middle">
+                    <td>
+                        <img src="images/i_bunny_1_16.png" width="480px" />
+                        <figcaption align="middle">16 light rays</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/i_bunny_1_64.png" width="480px" />
+                        <figcaption align="middle">64 light rays</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+
+    <h2 align="middle">Part 4: Global Illumination</h2>
+
+        <p>So far, we have only been taking direct illumination into consideration. However, light rays don't only come from light sources: they also bounce off surfaces to hit other surfaces. We can model this behavior to simulate global illumination, which includes indirect illumination along with the direct illumination we have implemented so far. Unlike previous functions, this one will be recursive. We start out by calculating the direct illumination at the point of intersection. To calculate indirect illumination, we pick a random direction in the hemisphere of this intersection then, with a recursive call, calculate the amount of light reflected from that direction onto our original intersection. When we're calculating the recursive call, we check to see if the direction we chose intersects with the scene. If it does, we calculate the global illumination at that point. Once this value is returned, we can use it as the incoming radiance into our original intersection, just plugging that into the same equation as the one we used in Part 3. We multiply it by the reflectance value at this intersection, as well as the cosine value, then divide by the pdf. We then add the value we've calculated to the <b>L_out</b> we previously computed for direct illuminance, and we're done! Global illumination!</p>
+
+        <p>
+            There are a few things still missing, however. We need a base case. The naive one is pretty simple: we just terminate upon reaching some pre-specified maximum depth. We can improve our estimates (and efficiency) by implementing Russian Roulette. Basically, we just terminate the recursion at a certain step with some termination probability p. Then, we want to normalize out this value by dividing our estimate for indirect lighting by 1-p. That's all it takes! Also worth mentioning is that we used the <i>bsdr->sample_f</i> function to calculate the reflectance value for a surface and a random ray along that surface's hemisphere at the same time. After everything is complete (and all the bugs are worked out), we've completed global illumination!
+        </p>
+
+        <p>
+            Here are a few scenes rendered with 1024 samples per pixel with 16 light rays:
+
+        <div align="center">
+                <table style="width=100%">
+                    <tr align="middle">
+                        <td>
+                            <img src="images/spheres_1024s_16l.png" width="480px" />
+                            <figcaption align="middle">spheres</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/wall-e_1024s_16l_m3.png" width="480px" />
+                            <figcaption align="middle">wall-e</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/blob_1024s_16l_m3.png" width="480px" />
+                            <figcaption align="middle">blob</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/dragon_1024s_16l_m3.png" width="480px" />
+                            <figcaption align="middle">dragon</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+        <p>
+            In the spheres image, the blue and red light from the side walls are relected by the spheres, showcasing our global illumination. The other four images don't change much, since it seems that they are lit by only a single point light, and include few or no surfaces for light to bounce off of. The largest difference is that shadows have been softened.
+            Next, let's examine the difference between this method and previous methods. Here are a couple pictures rendered with only direct illumination (left) and only indirect illumination (right). We can see the gaps that indirect illumination fills in! These renders use 4 light rays. The indirect renders use 3 levels of maximum depth.
+        </p>
+
+        <div align="center">
+                <table style="width=100%">
+                    <tr align="middle">
+                        <td>
+                            <img src="images/bench_direct_only.png" width="480px" />
+                            <figcaption align="middle">bench, direct only</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/bench_indirect_only.png" width="480px" />
+                            <figcaption align="middle">bench, indirect only</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/sphere_direct_only.png" width="480px" />
+                            <figcaption align="middle">spheres, direct only</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/sphere_indirect_only.png" width="480px" />
+                            <figcaption align="middle">spheres, indirect only</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+
+        <p>
+            Next, let's look at how the render changes as we vary the max depth. We'll look at the bunny scene, rendering with 1024 samples per pixel and 4 light rays. As you can see, the shadows get a bit less dark as depth increases, because more the rays that illuminate each surface become slightly brighter with each iteration. Beyond just 1 ray depth, though, the difference is pretty marginal. The red and blue accents near either edge of the bunny are slightly more pronounced with max ray depth 3 than max ray depth 1, the shadows are slightly softer, and the room is a bit brighter. I used a continuation probability of .4, so many of the rays don't reach a very deep depth, even when we allow our max ray depth to be 100.
+        </p>
+
+        <div align="center">
+                <table style="width=100%">
+                    <tr align="middle">
+                        <td>
+                            <img src="images/bunny_1024s_4l_m0.png" width="480px" />
+                            <figcaption align="middle">max ray depth: 0</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/bunny_1024s_4l_m1.png" width="480px" />
+                            <figcaption align="middle">max ray depth: 1</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/bunny_1024s_4l_m2.png" width="480px" />
+                            <figcaption align="middle">max ray depth: 2</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/bunny_1024s_4l_m3.png" width="480px" />
+                            <figcaption align="middle">max ray depth: 3</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <p align="middle">
+                <img src="images/bunny_1024s_4l_m100.png" width="480px" />
+                <figcaption align="middle">max ray depth: 100</figcaption>
+            </p>
+
+        <p>Let's look at a scene rendered with various sample-per-pixel rates. All were sampled with 4 light rays and 4 steps of indirect lighting. The quality of the image increases drastically as we increase the sample rate.</p>
+
+
+        <div align="center">
+                <table style="width=100%">
+                    <tr align="middle">
+                        <td>
+                            <img src="images/spheres_1s_4l.png" width="480px" />
+                            <figcaption align="middle">1 sample per pixel</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/spheres_2s_4l.png" width="480px" />
+                            <figcaption align="middle">2 samples per pixel</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/spheres_4s_4l.png" width="480px" />
+                            <figcaption align="middle">4 samples per pixel</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/spheres_8s_4l.png" width="480px" />
+                            <figcaption align="middle">8 samples per pixel</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/spheres_16s_4l.png" width="480px" />
+                            <figcaption align="middle">16 samples per pixel</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/spheres_64s_4l.png" width="480px" />
+                            <figcaption align="middle">64 samples per pixel</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <p align="middle">
+                <img src="images/spheres_1024s_4l.png" width="480px" />
+                <figcaption align="middle">1024 samples per pixel</figcaption>
+            </p>
+
+
+    <h2 align="middle">Part 5: Adaptive Sampling</h2>
+
+    <p>
+        Adaptive sampling can help us reduce the amount of compuation we use to render an image. If a pixel has already converged, i.e. it's value isn't changing, we don't need to take more samples! Adaptive sampling does exactly that. We use a formula from statistics to calculate an interval with 95% confidence. If this interval is below a threshold, we stop taking new samples. We keep two running sums: <b>s1</b> and <b>s2</b>. After each sample, we add the illuminance of that sample to <b>s1</b>, and the squared illuminance value to <b>s2</b>. After we've taken <i>samplePerBatch</i> samples, we compute some statistics and check our stopping condition. First, we compute the mean:
+    </p>
+
+    <p align="middle"><pre align="middle">μ = s_1 / n</pre></p>
+
+    <p>
+        Then, we can compute the squared standard deviation.
+    </p>
+
+    <p align="middle"><pre align="middle">σ^2 = (s_2 - (s_1^2 / n)) / (n - 1)</pre></p>
+
+    <p>
+        We can use these values to calculate <b>I</b>, our confidence interval.
+    </p>
+
+    <p align="middle"><pre align="middle">I = 1.96 * sqrt(σ^2 / n)</pre></p>
+
+    <p>
+        Finally, we check <b>I</b> against our stopping condition:
+    </p>
+
+    <p align="middle"><pre align="middle">I <= maxTolerance * μ</pre></p>
+
+    <p>
+        If this condition is true, we break out of our loop, divide the total sample aggregate by the number of samples we've taken so far, and set the correct sampleBuffer location to this value. We also set the correct sampleCountBuffer to the number of samples we ended up taking. If the condition isn't true, we continue looping, updating <b>s1</b> and <b>s2</b> and checking our stopping condition every <i>samplePerBatch</i> iterations. This can greatly speed up our renders on larger scenes, especially in well-lit areas. As you can see in the images below (red means more samples, blue means less samples), adaptive sampling cuts down on sampling in well-lit parts of the image, but doesn't speed up areas that are in shadow. This makes sense, since dark areas are being lit up mostly by indirect illumination, so we'd need to take more samples to accurately calculate their reflected values. These images are calculated with adaptive sampling, 2048 samples per pixel, 1 sample per light, and a max ray depth of 6.
+    </p>
+
+
+
+        <div align="center">
+                <table style="width=100%">
+                    <tr align="middle">
+                        <td>
+                            <img src="images/bunny_final.png" width="480px" />
+                            <figcaption align="middle">bunny</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/bunny_final_rate.png" width="480px" />
+                            <figcaption align="middle">bunny rate</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/spheres-a.png" width="480px" />
+                            <figcaption align="middle">spheres</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/spheres-a_rate.png" width="480px" />
+                            <figcaption align="middle">spheres rate</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/bench-a.png" width="480px" />
+                            <figcaption align="middle">bench</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/bench-a_rate.png" width="480px" />
+                            <figcaption align="middle">bench rate</figcaption>
+                        </td>
+                    </tr>
+                    <br>
+                    <tr align="middle">
+                        <td>
+                            <img src="images/wall-e-a.png" width="480px" />
+                            <figcaption align="middle">wall-e</figcaption>
+                        </td>
+                        <td>
+                            <img src="images/wall-e-a_rate.png" width="480px" />
+                            <figcaption align="middle">wall-e rate</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+
+
+
+
+
+     <!--
+
+            <p>Here is an example of how to include a simple formula:</p>
+            <p align="middle"><pre align="middle">a^2 + b^2 = c^2</pre></p>
+            <p>or, alternatively, you can include an SVG image of a LaTex formula.</p>
+            <p>This time it's your job to copy-paste in the rest of the sections :)</p>
+
+
+
+        <h2 align="middle">A Few Notes On Webpages</h2>
+            <p>Here are a few problems students have encountered in the past. You will probably encounter these problems at some point, so don't wait until right before the deadline to check that everything is working. Test your website on the instructional machines early!</p>
+            <ul>
+            <li>Your main report page should be called index.html.</li>
+            <li>Be sure to include and turn in all of the other files (such as images) that are linked in your report!</li>
+            <li>Use only <em>relative</em> paths to files, such as <pre>"./images/image.jpg"</pre>
+            Do <em>NOT</em> use absolute paths, such as <pre>"/Users/student/Desktop/image.jpg"</pre></li>
+            <li>Pay close attention to your filename extensions. Remember that on UNIX systems (such as the instructional machines), capitalization matters. <pre>.png != .jpeg != .jpg != .JPG</pre>
+            <li>Be sure to adjust the permissions on your files so that they are world readable. For more information on this please see this tutorial: <a href="http://www.grymoire.com/Unix/Permissions.html">http://www.grymoire.com/Unix/Permissions.html</a></li>
+            <li>And again, test your website on the instructional machines early!</li>
+
+    -->
+</div>
+</body>
 </html>
+
+
+
+

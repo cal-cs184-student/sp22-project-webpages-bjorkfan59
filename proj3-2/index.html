@@ -1,7 +1,199 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 3-2 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>  
+    div.padded {  
+      padding-top: 0px;  
+      padding-right: 100px;  
+      padding-bottom: 0.25in;  
+      padding-left: 100px;  
+    }  
+  </style> 
+<title>Gavin Fure  |  CS 184</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="style.css" media="screen" />
+</head>
+<body>
+<br />
+<h1 align="middle">Assignment 3-2: PathTracer</h1>
+    <h2 align="middle">Gavin Fure</h2>
+    <h3 align="middle">Website: <a href=https://cal-cs184-student.github.io/sp22-project-webpages-bjorkfan59/proj3-2/index.html>https://cal-cs184-student.github.io/sp22-project-webpages-bjorkfan59/proj3-2/index.html</a></h3>
+
+    <div class="padded">
+        <p>
+            In this project we added new BRDFs to the ray-tracing structure we completed in project 3-1. I decided to complete parts 1 and 2 of this assignment, implementing mirror and glass materials as well as the microfacet BRDF. It was fun to work with refraction and refraction together, and the results were interesting and pretty!
+        </p>
+
+    <h2 align="middle">Part 1: Mirror and Glass Materials</h2>
+        <p>In this section, we implemented two new BSDF behaviors: reflecting and refracting. Using only reflection as our BRDF gets us a mirrored surface, while refracting imitates a the light-bending action of a lens or body of water. We can combine these two behaviors to create a third new material type: glass. Glass both reflects and refracts light. This properties can be modeled stochastically using Schlick's approximation of the Fresnel factor. We will reflect light a certain portion of the time, and refract it the other portion. Next, we will look at how the light travels through glass objects by gradually increasing the maximum depth of our ray-tracing model.</p>
+
+        <p align=center>
+            <img src="images/glass_spheres_0.png" width="480px" />
+                        <figcaption align="middle">Max bounces: 0</figcaption>
+        </p>
+
+        <p>
+            With no bounces, we only display light that is directly from the source.
+        </p>
+
+        <p align=center>
+            <img src="images/glass_spheres_1.png" width="480px" />
+                        <figcaption align="middle">Max bounces: 1</figcaption>
+        </p>
+
+        <p>
+            After one bounce, we get a flat-lighting representation of the room, along with black spheres. These spheres have no color of their own. Since they only reflect or refract light, and we limit the depth of ray bounces to 1, they can only display the reflection of light that has not bounced yet (light from the source). The ceiling is completely dark, since there is not direct path from the light source to the ceiling. It won't light up until we allow more ray reflections.
+        </p>
+
+        <p align=center>
+            <img src="images/glass_spheres_2.png" width="480px" />
+                        <figcaption align="middle">Max bounces: 2</figcaption>
+        </p>
+
+        <p>
+            With two bounces, we can start to see some reflection and refraction in action. We see the flat-lit room from the previous render reflected in the left ball, which has a mirrored surface. The glass ball is still mostly dark, but it does have some dim reflections. Notice that the reflected image of each ball is still completely black. They are reflecting the scene from the previous render, which had completely dark spheres. The spheres' shadows are not as dark as the previous render, because they reflect some light now. The ceiling is now lit, but the ceiling that is reflected on the surface of the spheres is still dark.
+        </p>
+
+
+        <p align=center>
+            <img src="images/glass_spheres_3.png" width="480px" />
+                        <figcaption align="middle">Max bounces: 3</figcaption>
+        </p>
+
+        <p>
+            The glass sphere on the right has begun refracting some light. When light is refracted through the sphere, it must enter into the sphere on one end and exit out of the other. Our maximum ray depth is now large enough to allow light to pass through both sides of the sphere. The ceiling on the reflected image of the mirror sphere is no longer dark, but the image of the glass sphere is still pretty dark. The glass ball has begun to focus some light onto the surface below it, lighting it up brightly.
+        </p>
+
+        <p align=center>
+            <img src="images/glass_spheres_4.png" width="480px" />
+                        <figcaption align="middle">Max bounces: 4</figcaption>
+        </p>
+
+        <p>
+            We begin to see a light spot on the blue wall to the right of the glass sphere. The sphere is acting like a lens, focusing light from the source onto this point. The glass sphere appears more transparent now. Also, the reflected image of the glass ball on the mirror ball is no longer dark. The bright spot underneath the glass ball is brighter and more intense. The shadow underneath the mirror ball is slightly less dark.
+        </p>
+
+        <p align=center>
+            <img src="images/glass_spheres_5.png" width="480px" />
+                        <figcaption align="middle">Max bounces: 5</figcaption>
+        </p>
+
+        <p>
+            This image has only minimal changes from the previous one. The glass ball appears a little bit brighter, and the bright spot beneath it is even more intense. The shadow beneath this ball is a little bit smoother, but not by much. The image of the glass ball as reflected on the mirror ball is also a bit brighter and more transparent than it used to be.
+        </p>
+
+        
+        <p align="middle">
+            <img src="images/glass_spheres_100.png" width="480px" />
+            <figcaption align="middle">Max bounces: 100</figcaption>
+        </p>
+            The glass ball is brightest here, with slightly more clearly defined and realistic lens effects. It appears more transparent on the image reflected by the mirror ball. However, the difference between this render and the last is fairly minimal. Most of the action in the scene can be modeled by 5 light bounces, but the 100 bounce model appears more realistic.
+        <p>
+
+        <p>
+            Here's a hi-res render of the glass lucy statue, taken with 1024 samples per pixel, 16 samples per light, and a maximum ray depth of 7. Next to it is a lower-res \shot taken from a different angle. Some students posted their gorgeously colorful results on Piazza, and mine looks a bit more dull than theirs, but it still looks like glass. Perhaps applying some microfacet magic to this can make it even prettier!
+        </p>
+
+        <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/lucy_hi_res.png" width="480px" />
+                    </td>
+                    <td align="middle">
+                        <img src="images/lucy_screenshot.png" width="480px" />
+                    </td>
+                </tr>
+            </table>
+    </div>
+
+
+    <h2 align="middle">Part 2: Microfacet Materials</h2>
+
+    <p>
+        In this section, we implemented the Microfacet model of reflection. This model assumes a surface that is not perfectly smooth, quanitfying roughness with the 'alpha' coefficient. The rougher a material is, the more diffusely it will reflect light. We implement this through the mircofacet BRDF, which includes the nornal distribution function (NDF), the Fresnel term, the shadow-masking term. We perform importance sampling as well to increase efficiency.
+    </p>
+
+    <p>
+        Let's look at how the image changes as we vary alpha. All renders used 256 samples per pixel, 4 samples per light, and a max ray depth of 7.
+    </p>
+
+    <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/gold_dragon_pt005.png" width="480px" />
+                        <figcaption align="middle">Alpha: .005</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/gold_dragon_pt05.png" width="480px" />
+                        <figcaption align="middle">Alpha: .05</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                        <img src="images/gold_dragon_pt25.png" width="480px" />
+                        <figcaption align="middle">Alpha: .25</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/gold_dragon.png" width="480px" />
+                        <figcaption align="middle">Alpha: .5</figcaption>
+                    </td>
+                </tr>
+            </table>
+    </div>
+
+    <p>
+        At low values of alpha, the surface appears glossy, and reflects a lot of light. As alpha increases, the surface becomes more matte, appearing brighter and more even, with more diffuse reflections.
+    </p>
+
+    <p>
+        Next, let's look at the difference between the default cosine hemisphere sampling and the importance sampling we implemented. The sampling rate of these renders is 64 samples per pixel and 1 sample per light, with 7 max bounces. As expected, the cosine hemisphere sampled render is darker and noisier than the importance sampled one. There are a lot of black spots on the bunny that aren't present in the importance sampled bunny. If we used enough samples the cosine hemisphere version would begin to look like the importance-sampled one. At this low sample rate, however, the difference is clear.
+    </p>
+
+    <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/bunny_comp_hemisphere.png" width="480px" />
+                        <figcaption align="middle">Cosing Hemisphere Sampling</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/bunny_comp_importance.png" width="480px" />
+                        <figcaption align="middle">Importance Sampling</figcaption>
+                    </td>
+                </tr>
+            </table>
+    </div>
+
+    <p>
+        I applied several new materials to the dragon!
+    </p>
+
+    <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/mercury_dragon.png" width="480px" />
+                        <figcaption align="middle">Mercury</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/carbon_dragon.png" width="480px" />
+                        <figcaption align="middle">Carbon</figcaption>
+                    </td>
+                </tr>
+            </table>
+    </div>
+
+    <p align=center>
+        <img src="images/pvp_dragon.png" width="480px" />
+        <figcaption align="middle">PVP</figcaption>
+    </p>
+
+</div>
+</body>
 </html>
+
+
+
+

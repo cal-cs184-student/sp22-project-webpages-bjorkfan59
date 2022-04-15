@@ -1,7 +1,275 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 4 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Mesh Editor</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2022</h1>
+<h1 align="middle">Project 4: Cloth Simulator</h1>
+<h2 align="middle">Gavin Fure, CS184-</h2>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>In this project we built system that simulates the movement of fabrics. We simulate the spring forces between different points on a cloth to get a representation of its movement. Then we added collision with other objects, so our cloth can rest on top of a sphere or on a plane. Then we added self-collision, so that the cloth doesn't clip into itself but instead folds nicely. All of this comes together to form a system to approximates the motion of fabrics pretty well! The procedures needed to produce this simulation are much simpler than I though they could be. Representing a cloth as a sheet of point masses is a pretty clever and simple idea, and it seems very powerful and effective. I wonder what kind of things could improve this model?</p>
+
+<h2 align="middle">Part 1: Masses and springs</h2>
+
+<p>
+  In this section, we initialized the mesh with points and springs.
+</p>
+<p align=center>
+    <img src="images/a_view.png" width="480px" />
+</p>
+
+<p align=center>
+    <img src="images/no_shear.png" width="480px" />
+    <figcaption align="middle">Without shear</figcaption>
+</p>
+
+<p align=center>
+    <img src="images/shear_only.png" width="480px" />
+    <figcaption align="middle">Only shear</figcaption>
+</p>
+
+<p align=center>
+    <img src="images/all_three.png" width="480px" />
+    <figcaption align="middle">All three</figcaption>
+</p>
+
+
+<h2 align="middle">Part 2: Simulation</h2>
+
+<p>
+  In  this section, we implemented simulation. At each time step, we compute the total force acting on every point in the mesh, then use Verlet integration to compute new positions. We constrain the position updates so that no spring can be longer than 110% of its rest length, which helps prevent simulation weirdness.
+  </p>
+
+  <p align=center>
+    <img src="images/default_cloth.png" width="480px" />
+    <figcaption align="middle">Cloth at rest with default parameters.</figcaption>
+</p>
+
+  <p>
+    A very low ks (5) results in the cloth seeming very light and flexible. The bottom of the cloth swings in a much more dramatic way than the default, forces ripple through the cloth more violently, and we see many more wrinkles forming at rest.The area around the pinned points end up being very stretched and elongated. With a high ks (50000), the cloth seems heavier and less flexible. It stays together much more closely and overall moves much less. At rest, there is very little stretching around the pinned areas and the single fold looks very thick.
+  </p>
+
+  <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/ks_1.png" width="480px" />
+                        <figcaption align="middle">ks=1</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/ks_50000.png" width="480px" />
+                        <figcaption align="middle">ks=50000</figcaption>
+                    </td>
+                </tr>
+            </table>
+  </div>
+
+  <p>
+    We see a similar effect in reverse with the density parameter. A low density (1) results in behavior somewhat consisten with high ks: there isn't much stretching at the pinned spots, because the cloth has less mass and less weight pulling on those points. The bottom also appears very rigid and squarelike. We also see less ripples here. A high density (1000) causes more ripples and much more stretching around the pinned points, with a less rigid bottom.
+  </p>
+
+  <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/density_1.png" width="480px" />
+                        <figcaption align="middle">density=1</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/density_1000.png" width="480px" />
+                        <figcaption align="middle">density=1000</figcaption>
+                    </td>
+                </tr>
+            </table>
+  </div>
+
+  <p>
+    Damping appears to strongly affect the speed at which the cloth moves and how quickly it comes to rest. It's basically like an inertia factor. Without any damping, the cloth swings around wildly and quickly, seeming like it will never come to a rest. With damping maxed out (100%), the cloth moves extremely slowly, like it's on the moon. It also comes to rest pretty much as soon as it gets to the bottom of its arc. There is no swinging here.
+  </p>
+  <div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/damping_0_early.png" width="480px" />
+                        <figcaption align="middle">damping=0</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/damping_0_later.png" width="480px" />
+                        <figcaption align="middle">damping=0, a few seconds later</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                        <img src="images/damping_1_early.png" width="480px" />
+                        <figcaption align="middle">damping=1</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/damping_1_later.png" width="480px" />
+                        <figcaption align="middle">damping=1, a few seconds later</figcaption>
+                    </td>
+                </tr>
+            </table>
+  </div>
+
+<p align=center>
+  <img src="images/pinned_4.png" width="480px" />
+  <figcaption align="middle">Pinned_4</figcaption>
+</p>
+
+<h2 align="middle">Part 3: Collisions with other objects</h2>
+
+<p>
+  In this section, we implemented collision with spheres and planes. For spheres, we can tell whether a point is inside the sphere by checking the distance between the point and the center. If that distance is less than the sphere's radius, then the point is inside the sphere. We bump it back outside the sphere by calculating a correction vector, which points from the last position to where it should have hit the surface of the sphere. For planes, things are a little more complicated. We register a collision if the current position is on the opposite side of the plane from the last position. For both points, we find the difference between the point and a point on the plane, then take the dot product with the plane's normal. If both of these values have the same sign, then they are are the same side of the plane, and there is no collision. Else, we find the project of the current point onto the plane, and use that point to make a correction vector from the last point to a point close to the plane's surface. Below are some results: the cloth resting on top of a sphere and on top of a plane.
+</p>
+
+<div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/sphere_500ks.png" width="480px" />
+                        <figcaption align="middle">ks=500</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/sphere_5000ks.png" width="480px" />
+                        <figcaption align="middle">ks=5000</figcaption>
+                    </td>
+                </tr>
+            </table>
+</div>
+
+<p align=center>
+  <img src="images/sphere_50000ks.png" width="480px" />
+  <figcaption align="middle">ks=50000</figcaption>
+</p>
+
+
+<p align=center>
+  <img src="images/plane_intersection.png" width="480px" />
+  <figcaption align="middle">cloth resting on plane</figcaption>
+</p>
+
+<h2 align="middle">Part 4: Self-Collision</h2>
+
+<p>
+	In this section, we implemented collision between the mass particles within the cloth, allowing it fold in a realisitc way. It will no longer clip into itself, but will form folds that mimic that of real fabrics. I had some issues with persistent objects in this section, but once I figured out how to put vectors on the heap (I just needed to use the 'new' keyword haha), everything was pretty smooth sailing! Here are some images displaying my completed model.
+</p>
+
+<p align=center>
+  <img src="images/self_collision_early.png" width="480px" />
+  <figcaption align="middle">Early in the simulation</figcaption>
+</p>
+<p align=center>
+  <img src="images/self_collision_mid.png" width="480px" />
+  <figcaption align="middle">Middle</figcaption>
+</p>
+
+<p align=center>
+  <img src="images/self_collision_rest.png" width="480px" />
+  <figcaption align="middle">At rest</figcaption>
+</p>
+
+<p>
+	With a very low ks, the cloth becomes very active and frantic, squirming and writhing violently all over the place. It's like the slightest breeze causes it to flutter, since there's next to no tension holding the cloth together. There's chaos, without very much cohesion. It takes a relatively long time to come to rest, and when it does there aren't very many nice folds. Instead, there are a lot of small lumps that react strongly to the vibration the cloth is experiencing.
+</p>
+
+<div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/ks_50_early.png" width="480px" />
+  						<figcaption align="middle">ks=50; early</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/ks_50_rest.png" width="480px" />
+                        <figcaption align="middle">ks=50; at rest</figcaption>
+                    </td>
+                </tr>
+            </table>
+</div>
+
+<p>
+  With a high ks, the cloth exhibits much more structure in its folding. Large folds appear uniformly across the entire length of the fabric, and persist as the cloth falls onto itself. When it rests, it lays almost completely flat, with a couple large folds underneath. There is much more tension between points, causing this more structured behavior.
+</p>
+
+<div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/ks_50000_mid.png" width="480px" />
+  						<figcaption align="middle">ks=50,000; early</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/ks_50000_rest.png" width="480px" />
+                        <figcaption align="middle">ks=50,000; at rest</figcaption>
+                    </td>
+                </tr>
+            </table>
+</div>
+
+<p>
+	Just like with the previous parts, low density values exhibit similar behaviors to high ks values. At a density of 1, the cloth exhibits very large, structured folds, and appears mostly flat at rest.
+</p>
+
+<div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/density_1_early.png" width="480px" />
+  						<figcaption align="middle">density=1; early</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/density_1_rest.png" width="480px" />
+                        <figcaption align="middle">density=1; at rest</figcaption>
+                    </td>
+                </tr>
+            </table>
+</div>
+
+<p>
+	At high densities (1500), the cloth has many complex folds that react strongly to small forces, just like at low ks. When near rest, it has a lot of smaller flods that vibrate pretty strongly. It's very lumpy, much less smooth than at a low density. I'm not really sure what the physical explanation for this is. I would expect a heavier cloth to have more smooth folds, but it seems that that's not the case. I guess maybe because the mass is larger, we end up with stronger forces, which causes a lot of local movement?
+</p>
+
+
+<div align="center">
+            <table style="width=100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/density_1500_mid.png" width="480px" />
+  						<figcaption align="middle">density=1500; early</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/density_1500_rest.png" width="480px" />
+                        <figcaption align="middle">density=1500; at rest</figcaption>
+                    </td>
+                </tr>
+            </table>
+</div>
+
+
+</body>
 </html>
